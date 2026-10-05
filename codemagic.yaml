@@ -23,24 +23,24 @@ workflows:
         script: |
           set -e
           test -f assets/app_icon.svg
-          mkdir -p android/app/src/main/res/drawable-nodpi android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/values-v31
-
-          # Use the Flutter/Android SDK already provisioned by Codemagic; do not call sdkmanager.
           export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           if [ -z "$ANDROID_HOME" ]; then
-            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not available on this Codemagic machine."
+            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not available."
             exit 1
           fi
 
-          # Prefer an installed API 36 platform. If it is already present, no SDK download is needed.
-          if [ ! -d "$ANDROID_HOME/platforms/android-36" ]; then
-            echo "Android API 36 is not installed on this machine."
-            echo "Available Android platforms:"
+          # Codemagic has android-36.1 installed. Do not use sdkmanager and do not
+          # require an android-36 directory that is not present on this machine.
+          SDK_PLATFORM="$ANDROID_HOME/platforms/android-36.1"
+          if [ ! -d "$SDK_PLATFORM" ]; then
+            echo "Android platform android-36.1 is not installed."
             ls -1 "$ANDROID_HOME/platforms" 2>/dev/null || true
             exit 1
           fi
+          echo "Using installed Android platform: $SDK_PLATFORM"
 
-          # Configure compileSdk directly in the generated Flutter project.
+          mkdir -p android/app/src/main/res/drawable-nodpi android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/values-v31
+
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -48,14 +48,11 @@ workflows:
           s = p.read_text()
           s = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 36', s, count=1)
           if 'compileSdk = 36' not in s:
-              raise SystemExit('Could not set compileSdk = 36 in android/app/build.gradle.kts')
+              raise SystemExit('Could not set compileSdk = 36')
           p.write_text(s)
-          print('Verified app compileSdk = 36')
           PY
-
           grep -n "compileSdk" android/app/build.gradle.kts
 
-          # App icon/splash branding.
           convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
           cp assets/app_icon.png android/app/src/main/res/drawable-nodpi/ic_app_icon.png
 
@@ -148,7 +145,7 @@ workflows:
           if 'create("release")' not in s:
               marker = '    buildTypes {'
               if marker not in s:
-                  raise SystemExit('Could not locate buildTypes in android/app/build.gradle.kts')
+                  raise SystemExit('Could not locate buildTypes')
               signing = '''    signingConfigs {
               create("release") {
                   keyAlias = keystoreProperties["keyAlias"] as String
@@ -165,7 +162,7 @@ workflows:
               start = s.find(marker)
               release_start = s.find('release {', start)
               if start < 0 or release_start < 0:
-                  raise SystemExit('Could not locate release build type in android/app/build.gradle.kts')
+                  raise SystemExit('Could not locate release build type')
               insert_at = release_start + len('release {')
               s = s[:insert_at] + '\n            signingConfig = signingConfigs.getByName("release")' + s[insert_at:]
           p.write_text(s)
