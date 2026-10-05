@@ -26,9 +26,14 @@ workflows:
           export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           test -n "$ANDROID_HOME" || { echo "ANDROID_HOME/ANDROID_SDK_ROOT is not available."; exit 1; }
 
-          # Codemagic has API 36 available. Do not call sdkmanager here.
-          if [ ! -d "$ANDROID_HOME/platforms/android-36" ]; then
-            echo "Android platform android-36 is not available. Installed platforms:"
+          # Codemagic currently exposes android-36.1 on this machine.
+          # Do not require an exact android-36 directory and do not call sdkmanager.
+          if [ -d "$ANDROID_HOME/platforms/android-36.1" ]; then
+            echo "Using installed Android platform android-36.1"
+          elif [ -d "$ANDROID_HOME/platforms/android-36" ]; then
+            echo "Using installed Android platform android-36"
+          else
+            echo "No Android 36 platform found. Installed platforms:"
             ls -1 "$ANDROID_HOME/platforms" 2>/dev/null || true
             exit 1
           fi
@@ -111,10 +116,6 @@ workflows:
           set -e
           CACHE="${PUB_CACHE:-$HOME/.pub-cache}"
           echo "Patching Android library plugins in $CACHE"
-
-          # file_picker 8.x has an Android library module that may declare
-          # compileSdk 34. flutter_plugin_android_lifecycle can require 36.
-          # Patch the downloaded plugin build files before Gradle evaluates them.
           for d in \
             "$CACHE/hosted/pub.dev"/file_picker-*/android \
             "$CACHE/hosted/pub.dev"/flutter_plugin_android_lifecycle-*/android; do
@@ -129,7 +130,6 @@ workflows:
               rm -f "$d/build.gradle.kts.bak"
             fi
           done
-
           echo "Plugin compileSdk declarations after patch:"
           grep -R "compileSdk" "$CACHE/hosted/pub.dev"/file_picker-*/android "$CACHE/hosted/pub.dev"/flutter_plugin_android_lifecycle-*/android 2>/dev/null || true
 
