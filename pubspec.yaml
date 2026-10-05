@@ -1,0 +1,25 @@
+name: my_id_portal_print
+description: My ID Portal Print - scan, auto-align, A4 print and PDF.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  image_picker: ^1.2.0
+  path_provider: ^2.1.5
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  permission_handler: ^12.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
