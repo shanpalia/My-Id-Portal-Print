@@ -24,20 +24,14 @@ workflows:
           set -e
           test -f assets/app_icon.svg
           export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [ -z "$ANDROID_HOME" ]; then
-            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not available."
-            exit 1
-          fi
+          test -n "$ANDROID_HOME" || { echo "ANDROID_HOME/ANDROID_SDK_ROOT is not available."; exit 1; }
 
-          # Codemagic has android-36.1 installed. Do not use sdkmanager and do not
-          # require an android-36 directory that is not present on this machine.
-          SDK_PLATFORM="$ANDROID_HOME/platforms/android-36.1"
-          if [ ! -d "$SDK_PLATFORM" ]; then
-            echo "Android platform android-36.1 is not installed."
+          # Codemagic has API 36 available. Do not call sdkmanager here.
+          if [ ! -d "$ANDROID_HOME/platforms/android-36" ]; then
+            echo "Android platform android-36 is not available. Installed platforms:"
             ls -1 "$ANDROID_HOME/platforms" 2>/dev/null || true
             exit 1
           fi
-          echo "Using installed Android platform: $SDK_PLATFORM"
 
           mkdir -p android/app/src/main/res/drawable-nodpi android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/values-v31
 
@@ -48,10 +42,9 @@ workflows:
           s = p.read_text()
           s = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 36', s, count=1)
           if 'compileSdk = 36' not in s:
-              raise SystemExit('Could not set compileSdk = 36')
+              raise SystemExit('Could not set app compileSdk = 36')
           p.write_text(s)
           PY
-          grep -n "compileSdk" android/app/build.gradle.kts
 
           convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
           cp assets/app_icon.png android/app/src/main/res/drawable-nodpi/ic_app_icon.png
@@ -112,6 +105,33 @@ workflows:
         script: |
           set -e
           flutter pub get
+
+      - name: Fix Flutter plugin compile SDK
+        script: |
+          set -e
+          CACHE="${PUB_CACHE:-$HOME/.pub-cache}"
+          echo "Patching Android library plugins in $CACHE"
+
+          # file_picker 8.x has an Android library module that may declare
+          # compileSdk 34. flutter_plugin_android_lifecycle can require 36.
+          # Patch the downloaded plugin build files before Gradle evaluates them.
+          for d in \
+            "$CACHE/hosted/pub.dev"/file_picker-*/android \
+            "$CACHE/hosted/pub.dev"/flutter_plugin_android_lifecycle-*/android; do
+            if [ -f "$d/build.gradle" ]; then
+              echo "Patching $d/build.gradle"
+              sed -i.bak -E 's/compileSdk[[:space:]]*=?[[:space:]]*34/compileSdk = 36/g' "$d/build.gradle"
+              rm -f "$d/build.gradle.bak"
+            fi
+            if [ -f "$d/build.gradle.kts" ]; then
+              echo "Patching $d/build.gradle.kts"
+              sed -i.bak -E 's/compileSdk[[:space:]]*=[[:space:]]*34/compileSdk = 36/g' "$d/build.gradle.kts"
+              rm -f "$d/build.gradle.kts.bak"
+            fi
+          done
+
+          echo "Plugin compileSdk declarations after patch:"
+          grep -R "compileSdk" "$CACHE/hosted/pub.dev"/file_picker-*/android "$CACHE/hosted/pub.dev"/flutter_plugin_android_lifecycle-*/android 2>/dev/null || true
 
       - name: Configure Codemagic signing
         script: |
