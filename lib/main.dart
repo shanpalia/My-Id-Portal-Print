@@ -79,16 +79,28 @@ class _HomeShellState extends State<HomeShell> {
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
+  Future<void> _openSetup(BuildContext context, String path, String title) async {
+    if (!context.mounted) return;
+    final options = await showDialog<DocumentPrintOptions>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _PrintSetupDialog(),
+    );
+    if (options == null || !context.mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => DocumentEditorPage(path: path, title: title, options: options)));
+  }
+
   Future<void> _browse(BuildContext context, {String title = 'Document'}) async {
     final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false, withData: false);
-    if (result == null || result.files.single.path == null || !context.mounted) return;
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => DocumentEditorPage(path: result.files.single.path!, title: title)));
+    final path = result?.files.single.path;
+    if (path == null || !context.mounted) return;
+    await _openSetup(context, path, title);
   }
 
   Future<void> _scan(BuildContext context) async {
     final image = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 100);
     if (image == null || !context.mounted) return;
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => DocumentEditorPage(path: image.path, title: 'Scanned Document')));
+    await _openSetup(context, image.path, 'Scanned Document');
   }
 
   @override
@@ -132,25 +144,91 @@ class HomePage extends StatelessWidget {
       );
 }
 
+class DocumentPrintOptions {
+  final String unit;
+  final double width;
+  final double height;
+  final bool blackAndWhite;
+  const DocumentPrintOptions({required this.unit, required this.width, required this.height, required this.blackAndWhite});
+
+  double get widthMm => unit == 'inch' ? width * 25.4 : unit == 'cm' ? width * 10 : width;
+  double get heightMm => unit == 'inch' ? height * 25.4 : unit == 'cm' ? height * 10 : height;
+  double get widthPt => widthMm / 25.4 * 72;
+  double get heightPt => heightMm / 25.4 * 72;
+}
+
+class _PrintSetupDialog extends StatefulWidget {
+  const _PrintSetupDialog();
+  @override
+  State<_PrintSetupDialog> createState() => _PrintSetupDialogState();
+}
+
+class _PrintSetupDialogState extends State<_PrintSetupDialog> {
+  final width = TextEditingController(text: '85.6');
+  final height = TextEditingController(text: '54');
+  String unit = 'mm';
+  bool blackAndWhite = false;
+
+  @override
+  void dispose() {
+    width.dispose();
+    height.dispose();
+    super.dispose();
+  }
+
+  void _continue() {
+    final w = double.tryParse(width.text.trim());
+    final h = double.tryParse(height.text.trim());
+    if (w == null || h == null || w <= 0 || h <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid width and height.')));
+      return;
+    }
+    Navigator.pop(context, DocumentPrintOptions(unit: unit, width: w, height: h, blackAndWhite: blackAndWhite));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Set ID Print Size', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Choose the physical size before placing the ID on A4.'),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(value: unit, decoration: const InputDecoration(labelText: 'Unit', border: OutlineInputBorder()), items: const [
+            DropdownMenuItem(value: 'inch', child: Text('Inch (in)')),
+            DropdownMenuItem(value: 'mm', child: Text('Millimeter (mm)')),
+            DropdownMenuItem(value: 'cm', child: Text('Centimeter (cm)')),
+          ], onChanged: (v) => setState(() => unit = v ?? 'mm')),
+          const SizedBox(height: 12),
+          Row(children: [Expanded(child: TextField(controller: width, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Width', border: OutlineInputBorder()))), const SizedBox(width: 10), Expanded(child: TextField(controller: height, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Height', border: OutlineInputBorder())))]),
+          const SizedBox(height: 14),
+          SwitchListTile(contentPadding: EdgeInsets.zero, value: blackAndWhite, onChanged: (v) => setState(() => blackAndWhite = v), title: const Text('Black & White'), subtitle: const Text('Print the ID in grayscale'), secondary: const Icon(Icons.contrast_rounded)),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')), FilledButton.icon(onPressed: _continue, icon: const Icon(Icons.arrow_forward_rounded), label: const Text('CONTINUE'))],
+      );
+}
+
 class DocumentEditorPage extends StatefulWidget {
   final String path;
   final String title;
-  const DocumentEditorPage({super.key, required this.path, required this.title});
+  final DocumentPrintOptions options;
+  const DocumentEditorPage({super.key, required this.path, required this.title, required this.options});
   @override
   State<DocumentEditorPage> createState() => _DocumentEditorPageState();
 }
 
 class _DocumentEditorPageState extends State<DocumentEditorPage> {
-  double x = .12;
-  double y = .12;
-  double scale = .72;
+  double x = .08;
+  double y = .08;
   double rotation = 0;
-  Size? imageSize;
+  late double widthPt;
+  late double heightPt;
   bool busy = false;
+  Size? imageSize;
 
   @override
   void initState() {
     super.initState();
+    widthPt = widget.options.widthPt;
+    heightPt = widget.options.heightPt;
     _readImageSize();
   }
 
@@ -161,17 +239,37 @@ class _DocumentEditorPageState extends State<DocumentEditorPage> {
     if (mounted) setState(() => imageSize = Size(frame.image.width.toDouble(), frame.image.height.toDouble()));
   }
 
-  void _reset() => setState(() { x = .12; y = .12; scale = .72; rotation = 0; });
+  void _reset() => setState(() { x = .08; y = .08; rotation = 0; });
+
+  Future<Uint8List> _processedImageBytes() async {
+    final source = await File(widget.path).readAsBytes();
+    if (!widget.options.blackAndWhite) return source;
+    final codec = await ui.instantiateImageCodec(source);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    final paint = ui.Paint()..colorFilter = const ui.ColorFilter.matrix(<double>[
+      0.299, 0.587, 0.114, 0, 0,
+      0.299, 0.587, 0.114, 0, 0,
+      0.299, 0.587, 0.114, 0, 0,
+      0, 0, 0, 1, 0,
+    ]);
+    canvas.drawImage(image, ui.Offset.zero, paint);
+    final picture = recorder.endRecording();
+    final rendered = await picture.toImage(image.width, image.height);
+    final data = await rendered.toByteData(format: ui.ImageByteFormat.png);
+    return data!.buffer.asUint8List();
+  }
 
   Future<Uint8List> _makePdf() async {
-    final bytes = await File(widget.path).readAsBytes();
+    final bytes = await _processedImageBytes();
     final doc = pw.Document();
     final image = pw.MemoryImage(bytes);
     const pageW = 595.28;
     const pageH = 841.89;
-    final width = pageW * .72 * scale;
-    final ratio = imageSize == null || imageSize!.width == 0 ? .63 : imageSize!.height / imageSize!.width;
-    final height = width * ratio;
+    final width = widthPt.clamp(1.0, pageW);
+    final height = heightPt.clamp(1.0, pageH);
     final left = (x * pageW).clamp(0.0, pageW - width);
     final top = (y * pageH).clamp(0.0, pageH - height);
     doc.addPage(pw.Page(
@@ -205,24 +303,86 @@ class _DocumentEditorPageState extends State<DocumentEditorPage> {
             final availableH = constraints.maxHeight - 8;
             final pageW = (availableH * 210 / 297).clamp(180.0, availableW);
             final pageH = pageW * 297 / 210;
-            final imageW = pageW * .72 * scale;
-            final ratio = imageSize == null || imageSize!.width == 0 ? .63 : imageSize!.height / imageSize!.width;
-            final imageH = imageW * ratio;
+            final scale = pageW / pageW.clamp(1.0, double.infinity);
+            final imageW = widthPt / 595.28 * pageW;
+            final imageH = heightPt / 841.89 * pageH;
+            final left = (x * pageW).clamp(0.0, pageW - imageW);
+            final top = (y * pageH).clamp(0.0, pageH - imageH);
             return Center(child: Container(width: pageW, height: pageH, clipBehavior: Clip.hardEdge, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 16)]), child: Stack(children: [
               Positioned.fill(child: CustomPaint(painter: _A4GridPainter())),
-              Positioned(left: (x * pageW).clamp(0.0, pageW - imageW), top: (y * pageH).clamp(0.0, pageH - imageH), width: imageW, height: imageH, child: GestureDetector(
+              Positioned(left: left, top: top, width: imageW, height: imageH, child: GestureDetector(
                 onPanUpdate: (d) => setState(() { x = (x + d.delta.dx / pageW).clamp(0.0, 1.0); y = (y + d.delta.dy / pageH).clamp(0.0, 1.0); }),
-                onScaleUpdate: (d) => setState(() { scale = (scale * d.scale).clamp(.25, 1.5); rotation += d.rotation; }),
-                child: Transform.rotate(angle: rotation, child: Image.file(File(widget.path), fit: BoxFit.fill)),
+                onScaleUpdate: (d) => setState(() { rotation += d.rotation; if (d.scale != 1) { final factor = d.scale.clamp(.95, 1.05); widthPt = (widthPt * factor).clamp(20, 595.28); heightPt = (heightPt * factor).clamp(20, 841.89); } }),
+                child: ColorFiltered(
+                  colorFilter: widget.options.blackAndWhite ? const ColorFilter.matrix(<double>[0.299, 0.587, 0.114, 0, 0, 0.299, 0.587, 0.114, 0, 0, 0.299, 0.587, 0.114, 0, 0, 0, 0, 0, 1, 0]) : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                  child: Transform.rotate(angle: rotation, child: Image.file(File(widget.path), fit: BoxFit.fill)),
+                ),
               )),
-            ])));
+            ]));
           })),
           Container(padding: const EdgeInsets.fromLTRB(16, 10, 16, 14), decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(22))), child: Column(children: [
-            const Row(children: [Icon(Icons.open_with_rounded, size: 20, color: Color(0xFF1479FF)), SizedBox(width: 8), Expanded(child: Text('Drag the ID to change position. Pinch to resize/rotate.', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF40516D))))]),
-            Row(children: [const Icon(Icons.zoom_out_rounded, size: 20), Expanded(child: Slider(value: scale, min: .25, max: 1.5, onChanged: (v) => setState(() => scale = v))), const Icon(Icons.zoom_in_rounded, size: 20)]),
-            Row(children: [Expanded(child: FilledButton.icon(onPressed: busy ? null : _print, icon: const Icon(Icons.print_rounded), label: const Text('Print A4'))), const SizedBox(width: 10), Expanded(child: OutlinedButton.icon(onPressed: busy ? null : _sharePdf, icon: const Icon(Icons.picture_as_pdf_rounded), label: const Text('Save / Share PDF')))]),
+            Row(children: [const Icon(Icons.straighten_rounded, size: 20, color: Color(0xFF1479FF)), const SizedBox(width: 8), Expanded(child: Text('${widget.options.width.toStringAsFixed(1)} ${widget.options.unit} × ${widget.options.height.toStringAsFixed(1)} ${widget.options.unit}${widget.options.blackAndWhite ? ' • B&W' : ' • Color'}', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF40516D)))]),
+            const SizedBox(height: 4),
+            const Text('Drag to move • Pinch to resize/rotate', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF72809A))),
+            const SizedBox(height: 10),
+            Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () async { final o = await showDialog<DocumentPrintOptions>(context: context, barrierDismissible: false, builder: (_) => _PrintSetupDialogFromCurrent(options: widget.options)); if (o != null && mounted) { setState(() { widthPt = o.widthPt; heightPt = o.heightPt; }); } }, icon: const Icon(Icons.tune_rounded), label: const Text('Size / Color'))), const SizedBox(width: 10), Expanded(child: FilledButton.icon(onPressed: busy ? null : _print, icon: const Icon(Icons.print_rounded), label: const Text('Print A4'))), const SizedBox(width: 10), Expanded(child: OutlinedButton.icon(onPressed: busy ? null : _sharePdf, icon: const Icon(Icons.picture_as_pdf_rounded), label: const Text('PDF')))]),
           ])),
         ]),
+      );
+}
+
+class _PrintSetupDialogFromCurrent extends StatefulWidget {
+  final DocumentPrintOptions options;
+  const _PrintSetupDialogFromCurrent({required this.options});
+  @override
+  State<_PrintSetupDialogFromCurrent> createState() => _PrintSetupDialogFromCurrentState();
+}
+
+class _PrintSetupDialogFromCurrentState extends State<_PrintSetupDialogFromCurrent> {
+  late final TextEditingController width;
+  late final TextEditingController height;
+  late String unit;
+  late bool blackAndWhite;
+
+  @override
+  void initState() {
+    super.initState();
+    unit = widget.options.unit;
+    width = TextEditingController(text: widget.options.width.toString());
+    height = TextEditingController(text: widget.options.height.toString());
+    blackAndWhite = widget.options.blackAndWhite;
+  }
+
+  @override
+  void dispose() { width.dispose(); height.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => _PrintSetupDialogBody(width: width, height: height, unit: unit, blackAndWhite: blackAndWhite, onUnitChanged: (v) => setState(() => unit = v), onBwChanged: (v) => setState(() => blackAndWhite = v), onSave: () { final w = double.tryParse(width.text); final h = double.tryParse(height.text); if (w == null || h == null || w <= 0 || h <= 0) return; Navigator.pop(context, DocumentPrintOptions(unit: unit, width: w, height: h, blackAndWhite: blackAndWhite)); });
+}
+
+class _PrintSetupDialogBody extends StatelessWidget {
+  final TextEditingController width;
+  final TextEditingController height;
+  final String unit;
+  final bool blackAndWhite;
+  final ValueChanged<String> onUnitChanged;
+  final ValueChanged<bool> onBwChanged;
+  final VoidCallback onSave;
+  const _PrintSetupDialogBody({required this.width, required this.height, required this.unit, required this.blackAndWhite, required this.onUnitChanged, required this.onBwChanged, required this.onSave});
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Set ID Print Size', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Choose the physical size before placing the ID on A4.'),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(value: unit, decoration: const InputDecoration(labelText: 'Unit', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'inch', child: Text('Inch (in)')), DropdownMenuItem(value: 'mm', child: Text('Millimeter (mm)')), DropdownMenuItem(value: 'cm', child: Text('Centimeter (cm)'))], onChanged: (v) { if (v != null) onUnitChanged(v); }),
+          const SizedBox(height: 12),
+          Row(children: [Expanded(child: TextField(controller: width, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Width', border: OutlineInputBorder()))), const SizedBox(width: 10), Expanded(child: TextField(controller: height, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Height', border: OutlineInputBorder())))]),
+          const SizedBox(height: 14),
+          SwitchListTile(contentPadding: EdgeInsets.zero, value: blackAndWhite, onChanged: onBwChanged, title: const Text('Black & White'), subtitle: const Text('Print the ID in grayscale'), secondary: const Icon(Icons.contrast_rounded)),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')), FilledButton.icon(onPressed: onSave, icon: const Icon(Icons.check_rounded), label: const Text('APPLY'))],
       );
 }
 
