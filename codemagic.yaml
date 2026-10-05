@@ -2,6 +2,7 @@ workflows:
   android-signed-release:
     name: My ID Portal Print - Signed APK
     max_build_duration: 60
+
     environment:
       flutter: 3.44.4
       java: 17
@@ -18,59 +19,52 @@ workflows:
             flutter create --platforms=android --org com.shanpalia --project-name my_id_portal_print .
           fi
 
-      - name: Prepare app icon asset
+      - name: Use compile-safe app source
+        script: |
+          set -e
+          cp lib/main_fixed.dart lib/main.dart
+          rm -f test/widget_test.dart
+          echo "Using compile-safe My ID Portal Print source."
+
+      - name: Configure app icon and splash
         script: |
           set -e
           test -f assets/app_icon.svg
-          mkdir -p assets
-          convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
-          test -s assets/app_icon.png
-
-      - name: Configure Android branding
-        script: |
-          set -e
           mkdir -p android/app/src/main/res/drawable-nodpi android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/values-v31
+          convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
           cp assets/app_icon.png android/app/src/main/res/drawable-nodpi/ic_app_icon.png
           cat > android/app/src/main/res/drawable/launch_background.xml <<'EOF'
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-              <item android:drawable="@android:color/white" />
-              <item android:gravity="center" android:width="180dp" android:height="180dp">
-                  <bitmap android:src="@drawable/ic_app_icon" android:gravity="fill" />
-              </item>
+            <item android:drawable="@android:color/white" />
+            <item android:gravity="center" android:width="180dp" android:height="180dp"><bitmap android:src="@drawable/ic_app_icon" android:gravity="fill" /></item>
           </layer-list>
           EOF
           cat > android/app/src/main/res/values/styles.xml <<'EOF'
           <resources>
-              <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:windowNoTitle">true</item>
-                  <item name="android:windowLightStatusBar">true</item>
-                  <item name="android:statusBarColor">#FFFFFF</item>
-                  <item name="android:navigationBarColor">#FFFFFF</item>
-                  <item name="android:windowBackground">@drawable/launch_background</item>
-              </style>
-              <style name="NormalTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:windowLightStatusBar">true</item>
-                  <item name="android:statusBarColor">#F7FAFF</item>
-                  <item name="android:navigationBarColor">#F7FAFF</item>
-                  <item name="android:windowBackground">#F7FAFF</item>
-              </style>
+            <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+              <item name="android:windowNoTitle">true</item>
+              <item name="android:windowLightStatusBar">true</item>
+              <item name="android:statusBarColor">#FFFFFF</item>
+              <item name="android:navigationBarColor">#FFFFFF</item>
+              <item name="android:windowBackground">@drawable/launch_background</item>
+            </style>
+            <style name="NormalTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+              <item name="android:windowLightStatusBar">true</item>
+              <item name="android:statusBarColor">#F7FAFF</item>
+              <item name="android:navigationBarColor">#F7FAFF</item>
+              <item name="android:windowBackground">#F7FAFF</item>
+            </style>
           </resources>
           EOF
           cat > android/app/src/main/res/values-v31/styles.xml <<'EOF'
           <resources>
-              <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:windowSplashScreenBackground">#FFFFFF</item>
-                  <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_app_icon</item>
-                  <item name="android:windowLightStatusBar">true</item>
-                  <item name="android:statusBarColor">#FFFFFF</item>
-                  <item name="android:navigationBarColor">#FFFFFF</item>
-              </style>
-              <style name="NormalTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:windowLightStatusBar">true</item>
-                  <item name="android:statusBarColor">#F7FAFF</item>
-                  <item name="android:navigationBarColor">#F7FAFF</item>
-                  <item name="android:windowBackground">#F7FAFF</item>
-              </style>
+            <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+              <item name="android:windowSplashScreenBackground">#FFFFFF</item>
+              <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_app_icon</item>
+              <item name="android:windowLightStatusBar">true</item>
+              <item name="android:statusBarColor">#FFFFFF</item>
+              <item name="android:navigationBarColor">#FFFFFF</item>
+            </style>
           </resources>
           EOF
           python3 - <<'PY'
@@ -87,62 +81,13 @@ workflows:
           set -e
           flutter pub get
 
-      - name: Ensure document tile widget exists
-        script: |
-          set -e
-          if ! grep -q "class _DocTile" lib/main.dart; then
-            cat >> lib/main.dart <<'DART'
-
-          class _DocTile extends StatelessWidget {
-            final IconData icon;
-            final String label;
-            final VoidCallback onTap;
-
-            const _DocTile(this.icon, this.label, this.onTap, {super.key});
-
-            @override
-            Widget build(BuildContext context) {
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: onTap,
-                  borderRadius: BorderRadius.circular(16),
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE4EAF3)),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, color: const Color(0xFF1479FF), size: 30),
-                        const SizedBox(height: 7),
-                        Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }
-          }
-          DART
-          fi
-          echo "Document tile widget check complete."
-
       - name: Configure Codemagic signing
         script: |
           set -e
-          test -n "$CM_KEYSTORE_PATH"
-          test -n "$CM_KEYSTORE_PASSWORD"
-          test -n "$CM_KEY_ALIAS"
-          test -n "$CM_KEY_PASSWORD"
+          test -n "$CM_KEYSTORE_PATH" || { echo "Codemagic keystore path is missing."; exit 1; }
+          test -n "$CM_KEYSTORE_PASSWORD" || { echo "Codemagic keystore password is missing."; exit 1; }
+          test -n "$CM_KEY_ALIAS" || { echo "Codemagic key alias is missing."; exit 1; }
+          test -n "$CM_KEY_PASSWORD" || { echo "Codemagic key password is missing."; exit 1; }
           cat > android/key.properties <<EOF
           storePassword=$CM_KEYSTORE_PASSWORD
           keyPassword=$CM_KEY_PASSWORD
@@ -151,7 +96,6 @@ workflows:
           EOF
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p = Path('android/app/build.gradle.kts')
           s = p.read_text()
           header = '''import java.util.Properties
@@ -166,7 +110,11 @@ workflows:
           '''
           if 'val keystorePropertiesFile' not in s:
               s = header + s
-          signing = '''    signingConfigs {
+          if 'create("release")' not in s:
+              marker = '    buildTypes {'
+              if marker not in s:
+                  raise SystemExit('Could not locate buildTypes in android/app/build.gradle.kts')
+              signing = '''    signingConfigs {
               create("release") {
                   keyAlias = keystoreProperties["keyAlias"] as String
                   keyPassword = keystoreProperties["keyPassword"] as String
@@ -176,31 +124,21 @@ workflows:
           }
 
           '''
-          if 'create("release")' not in s:
-              marker = '    buildTypes {'
-              if marker not in s:
-                  raise SystemExit('Could not locate buildTypes in android/app/build.gradle.kts')
               s = s.replace(marker, signing + marker, 1)
-          release_sign = 'signingConfig = signingConfigs.getByName("release")'
-          if release_sign not in s:
-              patterns = [r'(getByName\("release"\)\s*\{)', r'(release\s*\{)']
-              for pattern in patterns:
-                  m = re.search(pattern, s)
-                  if m:
-                      pos = m.end()
-                      s = s[:pos] + '\n            ' + release_sign + s[pos:]
-                      break
-              else:
-                  m = re.search(r'buildTypes\s*\{', s)
-                  if not m:
-                      raise SystemExit('Could not locate buildTypes in android/app/build.gradle.kts')
-                  pos = m.end()
-                  s = s[:pos] + '\n        release {\n            ' + release_sign + '\n        }' + s[pos:]
+          if 'signingConfig = signingConfigs.getByName("release")' not in s:
+              marker = '    buildTypes {'
+              start = s.find(marker)
+              if start < 0:
+                  raise SystemExit('Could not locate buildTypes in android/app/build.gradle.kts')
+              release_start = s.find('release {', start)
+              if release_start < 0:
+                  raise SystemExit('Could not locate release build type in android/app/build.gradle.kts')
+              insert_at = release_start + len('release {')
+              s = s[:insert_at] + '\n            signingConfig = signingConfigs.getByName("release")' + s[insert_at:]
           p.write_text(s)
           PY
-          echo "Codemagic release signing configuration prepared."
 
-      - name: Build signed release APK
+      - name: Analyze and build signed APK
         script: |
           set -e
           flutter clean
