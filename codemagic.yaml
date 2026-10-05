@@ -2,7 +2,6 @@ workflows:
   android-signed-release:
     name: My ID Portal Print - Signed APK
     max_build_duration: 60
-    instance_type: linux_x2
     environment:
       flutter: 3.44.4
       java: 17
@@ -10,6 +9,7 @@ workflows:
         - paliaapk-release
       vars:
         PACKAGE_NAME: com.shanpalia.my_id_portal_print
+
     scripts:
       - name: Generate Android project
         script: |
@@ -17,6 +17,7 @@ workflows:
           if [ ! -d android ]; then
             flutter create --platforms=android --org com.shanpalia --project-name my_id_portal_print .
           fi
+
       - name: Prepare app icon asset
         script: |
           set -e
@@ -24,6 +25,7 @@ workflows:
           mkdir -p assets
           convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
           test -s assets/app_icon.png
+
       - name: Configure Android branding
         script: |
           set -e
@@ -79,10 +81,12 @@ workflows:
           s = s.replace('android:label="my_id_portal_print"', 'android:label="My ID Portal Print"')
           p.write_text(s)
           PY
+
       - name: Get Flutter packages
         script: |
           set -e
           flutter pub get
+
       - name: Configure Codemagic signing
         script: |
           set -e
@@ -134,12 +138,14 @@ workflows:
               s = s.replace(marker, marker + '\n            signingConfig = signingConfigs.getByName("release")', 1)
           p.write_text(s)
           PY
+
       - name: Build signed release APK
         script: |
           set -e
           flutter clean
           flutter pub get
           flutter build apk --release --no-tree-shake-icons
+
       - name: Verify signed APK
         script: |
           set -e
@@ -147,8 +153,10 @@ workflows:
           test -f "$APK"
           ls -lh "$APK"
           echo "My ID Portal Print signed APK created successfully."
+
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
+
     publishing:
       email:
         recipients:
