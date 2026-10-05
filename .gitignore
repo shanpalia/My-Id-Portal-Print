@@ -1,15 +1,17 @@
-# Flutter / Dart generated files
+# Dart/Flutter generated
 .dart_tool/
-.packages
 .pub/
+.packages
+.pub-cache/
 build/
 coverage/
 .flutter-plugins
 .flutter-plugins-dependencies
-.pub-cache/
+
 # IDE
 .idea/
 .vscode/
+
 # OS
 .DS_Store
 Thumbs.db
