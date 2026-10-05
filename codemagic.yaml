@@ -1,0 +1,50 @@
+workflows:
+  android-signed-release:
+    name: My ID Portal Print - Signed APK
+    max_build_duration: 60
+    instance_type: linux_x2
+
+    environment:
+      flutter: 3.44.4
+      java: 17
+      android_signing:
+        - paliaapk-release
+      vars:
+        PACKAGE_NAME: com.shanpalia.myidportalprint
+
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Ensure Android project exists
+        script: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --org com.shanpalia .
+          fi
+
+      - name: Configure Android release signing
+        script: |
+          cat > android/key.properties <<EOF
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=$CM_KEYSTORE_PATH
+          EOF
+
+      - name: Build signed release APK
+        script: |
+          flutter clean
+          flutter pub get
+          flutter build apk --release
+
+    artifacts:
+      - build/app/outputs/flutter-apk/app-release.apk
+
+    publishing:
+      email:
+        recipients:
+          - shanpalia786@gmail.com
+        notify:
+          success: true
+          failure: true
