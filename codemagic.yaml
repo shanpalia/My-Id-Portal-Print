@@ -138,6 +138,8 @@ workflows:
       - name: Analyze and build signed APK
         script: |
           set -e
+          # main_fixed.dart is an obsolete duplicate source and must not be analyzed.
+          rm -f lib/main_fixed.dart
           rm -f test/widget_test.dart
           flutter clean
           flutter pub get
