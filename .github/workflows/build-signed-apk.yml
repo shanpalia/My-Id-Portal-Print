@@ -25,6 +25,9 @@ jobs:
           flutter-version: '3.44.4'
           cache: true
 
+      - name: Generate Android project
+        run: flutter create . --platforms=android --project-name my_id_portal_print
+
       - name: Flutter pub get
         run: flutter pub get
 
@@ -54,6 +57,31 @@ jobs:
           keyAlias=$KEY_ALIAS
           storeFile=upload-keystore.jks
           EOF
+
+      - name: Configure release signing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle.kts')
+          s = p.read_text()
+          imports = '''import java.util.Properties\nimport java.io.FileInputStream\n\nval keystoreProperties = Properties()\nval keystorePropertiesFile = rootProject.file("key.properties")\nif (keystorePropertiesFile.exists()) {\n    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }\n}\n\n'''
+          if 'val keystorePropertiesFile' not in s:
+              s = imports + s
+          signing = '''signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["keyPassword"] as String\n            storeFile = file(keystoreProperties["storeFile"] as String)\n            storePassword = keystoreProperties["storePassword"] as String\n        }\n    }\n\n    '''
+          if 'create("release")' not in s:
+              s = s.replace('    buildTypes {', '    ' + signing + 'buildTypes {', 1)
+          old = 'signingConfig = signingConfigs.getByName("debug")'
+          if old in s:
+              s = s.replace(old, 'signingConfig = signingConfigs.getByName("release")')
+          elif 'signingConfig = signingConfigs.getByName("release")' not in s:
+              s = s.replace('release {', 'release {\n            signingConfig = signingConfigs.getByName("release")', 1)
+          p.write_text(s)
+          PY
+
+      - name: Verify Android signing configuration
+        run: |
+          test -f android/app/upload-keystore.jks
+          grep -q 'signingConfigs.getByName("release")' android/app/build.gradle.kts
 
       - name: Build signed release APK
         run: flutter build apk --release
