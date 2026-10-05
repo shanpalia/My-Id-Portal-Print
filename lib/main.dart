@@ -276,7 +276,18 @@ class _DocumentEditorPageState extends State<DocumentEditorPage> {
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
       build: (_) => pw.Stack(children: [
-        pw.Positioned(left: left, top: top, width: width, height: height, child: pw.Transform.rotate(angle: rotation, child: pw.Image(image, fit: pw.BoxFit.fill))),
+        pw.Positioned(
+          left: left,
+          top: top,
+          child: pw.Container(
+            width: width,
+            height: height,
+            child: pw.Transform.rotate(
+              angle: rotation,
+              child: pw.Image(image, fit: pw.BoxFit.fill),
+            ),
+          ),
+        ),
       ]),
     ));
     return doc.save();
@@ -303,7 +314,6 @@ class _DocumentEditorPageState extends State<DocumentEditorPage> {
             final availableH = constraints.maxHeight - 8;
             final pageW = (availableH * 210 / 297).clamp(180.0, availableW);
             final pageH = pageW * 297 / 210;
-            final scale = pageW / pageW.clamp(1.0, double.infinity);
             final imageW = widthPt / 595.28 * pageW;
             final imageH = heightPt / 841.89 * pageH;
             final left = (x * pageW).clamp(0.0, pageW - imageW);
@@ -398,30 +408,3 @@ class _A4GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-
-class FilesPage extends StatelessWidget { const FilesPage({super.key}); @override Widget build(BuildContext c) => const _Page(title: 'My Files', child: Center(child: Text('Select a document from Home to prepare it.'))); }
-class PrintPage extends StatelessWidget { const PrintPage({super.key}); @override Widget build(BuildContext c) => const _Page(title: 'Print', child: Center(child: Text('Choose a document from Home, then adjust it on the A4 page.'))); }
-class HistoryPage extends StatelessWidget { const HistoryPage({super.key}); @override Widget build(BuildContext c) => const _Page(title: 'History', child: Center(child: Text('Print history will appear here.'))); }
-
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
-  @override
-  Widget build(BuildContext context) => _Page(title: 'Settings', child: ListView(padding: const EdgeInsets.fromLTRB(18, 8, 18, 24), children: [
-    Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE4EAF3))), child: Row(children: [ClipRRect(borderRadius: BorderRadius.circular(14), child: SizedBox(width: 64, height: 64, child: SvgPicture.asset('assets/app_icon.svg'))), const SizedBox(width: 14), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('My ID Portal Print', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF14233D))), SizedBox(height: 3), Text('Developer by ShanPalia', style: TextStyle(color: Color(0xFF72809A), fontSize: 12)), SizedBox(height: 3), Text('Version 1.0.0', style: TextStyle(color: Color(0xFF1479FF), fontWeight: FontWeight.w600, fontSize: 12))]))])),
-    const SizedBox(height: 14),
-    Card(elevation: 0, color: const Color(0xFFEAF5FF), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), child: ListTile(leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.system_update_rounded, color: Color(0xFF1479FF))), title: const Text('Check for Update', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF14233D))), subtitle: const Text('Check the latest version'), trailing: FilledButton(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You are using the latest available version.'))), child: const Text('CHECK')))),
-    const SizedBox(height: 12),
-    _SettingTile(Icons.print_rounded, 'Printer Settings', 'Configure your printer', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterSettingsPage()))),
-    _SettingTile(Icons.picture_as_pdf_rounded, 'A4 & PDF Settings', 'Paper and PDF preferences', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PdfSettingsPage()))),
-    _SettingTile(Icons.info_outline_rounded, 'About', 'My ID Portal Print', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage()))),
-  ]));
-}
-
-class PrinterSettingsPage extends StatelessWidget { const PrinterSettingsPage({super.key}); @override Widget build(BuildContext c) => const _Page(title: 'Printer Settings', child: Center(child: Text('Printer settings'))); }
-class PdfSettingsPage extends StatelessWidget { const PdfSettingsPage({super.key}); @override Widget build(BuildContext c) => const _Page(title: 'A4 & PDF Settings', child: Center(child: Text('A4 and PDF settings'))); }
-class AboutPage extends StatelessWidget { const AboutPage({super.key}); @override Widget build(BuildContext c) => const _Page(title: 'About', child: Center(child: Text('My ID Portal Print\nDeveloper by ShanPalia', textAlign: TextAlign.center))); }
-
-class _Page extends StatelessWidget { final String title; final Widget child; const _Page({required this.title, required this.child}); @override Widget build(BuildContext context) => SafeArea(child: Column(children: [AppBar(title: Text(title), backgroundColor: Colors.transparent, elevation: 0), Expanded(child: child)])); }
-class _ActionCard extends StatelessWidget { final IconData icon; final String label; final Color color; final VoidCallback onTap; const _ActionCard(this.icon, this.label, this.color, this.onTap); @override Widget build(BuildContext c) => Expanded(child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(18), child: Ink(padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE4EAF3))), child: Column(children: [Icon(icon, size: 30, color: color), const SizedBox(height: 8), Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))])))); }
-class _DocTile extends StatelessWidget { final IconData icon; final String label; final VoidCallback onTap; const _DocTile(this.icon, this.label, this.onTap); @override Widget build(BuildContext c) => InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16), child: Ink(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE4EAF3))), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: const Color(0xFF1479FF), size: 30), const SizedBox(height: 7), Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))]))); }
-class _SettingTile extends StatelessWidget { final IconData icon; final String title, subtitle; final VoidCallback onTap; const _SettingTile(this.icon, this.title, this.subtitle, this.onTap); @override Widget build(BuildContext c) => Card(elevation: 0, margin: const EdgeInsets.only(bottom: 10), child: ListTile(onTap: onTap, leading: Icon(icon, color: const Color(0xFF1479FF)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(subtitle), trailing: const Icon(Icons.chevron_right_rounded))); }
