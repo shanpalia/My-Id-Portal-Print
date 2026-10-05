@@ -19,23 +19,33 @@ workflows:
             flutter create --platforms=android --org com.shanpalia --project-name my_id_portal_print .
           fi
 
-      - name: Configure Android SDK 36 and branding
+      - name: Configure Android compile SDK and branding
         script: |
           set -e
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
-
           test -f assets/app_icon.svg
           mkdir -p android/app/src/main/res/drawable-nodpi android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/values-v31
-          convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
-          cp assets/app_icon.png android/app/src/main/res/drawable-nodpi/ic_app_icon.png
 
-          # Force the app module to compile against Android API 36.
+          # Use the Flutter/Android SDK already provisioned by Codemagic; do not call sdkmanager.
+          export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$ANDROID_HOME" ]; then
+            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not available on this Codemagic machine."
+            exit 1
+          fi
+
+          # Prefer an installed API 36 platform. If it is already present, no SDK download is needed.
+          if [ ! -d "$ANDROID_HOME/platforms/android-36" ]; then
+            echo "Android API 36 is not installed on this machine."
+            echo "Available Android platforms:"
+            ls -1 "$ANDROID_HOME/platforms" 2>/dev/null || true
+            exit 1
+          fi
+
+          # Configure compileSdk directly in the generated Flutter project.
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('android/app/build.gradle.kts')
           s = p.read_text()
-          import re
           s = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 36', s, count=1)
           if 'compileSdk = 36' not in s:
               raise SystemExit('Could not set compileSdk = 36 in android/app/build.gradle.kts')
@@ -44,6 +54,10 @@ workflows:
           PY
 
           grep -n "compileSdk" android/app/build.gradle.kts
+
+          # App icon/splash branding.
+          convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
+          cp assets/app_icon.png android/app/src/main/res/drawable-nodpi/ic_app_icon.png
 
           cat > android/app/src/main/res/drawable/launch_background.xml <<'EOF'
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
