@@ -3,7 +3,6 @@ workflows:
     name: My ID Portal Print - Signed APK
     max_build_duration: 60
     instance_type: linux_x2
-
     environment:
       flutter: 3.44.4
       java: 17
@@ -11,120 +10,147 @@ workflows:
         - paliaapk-release
       vars:
         PACKAGE_NAME: com.shanpalia.my_id_portal_print
-
     scripts:
       - name: Generate Android project
         script: |
+          set -e
           if [ ! -d android ]; then
             flutter create --platforms=android --org com.shanpalia --project-name my_id_portal_print .
           fi
-
-      - name: Configure app icon and native splash
+      - name: Prepare app icon asset
         script: |
           set -e
-          mkdir -p android/app/src/main/res/drawable android/app/src/main/res/mipmap-anydpi-v26 android/app/src/main/res/values
-
-          cat > android/app/src/main/res/drawable/ic_launcher_foreground.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-            <path android:fillColor="#FFFFFF" android:pathData="M29,18 L68,18 L82,32 L82,88 L29,88 Z"/>
-            <path android:fillColor="#1479FF" android:pathData="M68,18 L68,32 L82,32 Z"/>
-            <path android:fillColor="#1479FF" android:pathData="M39,40 L72,40 L72,45 L39,45 Z M39,50 L72,50 L72,55 L39,55 Z"/>
-            <path android:fillColor="#1479FF" android:pathData="M34,63 L76,63 L76,78 L34,78 Z"/>
-            <path android:fillColor="#FFFFFF" android:pathData="M40,67 L70,67 L70,74 L40,74 Z"/>
-            <path android:fillColor="#1479FF" android:pathData="M43,27 L59,27 L59,32 L43,32 Z"/>
-          </vector>
+          mkdir -p assets
+          cat > /tmp/icon.b64 <<'ICON_EOF'
+[ICON_BASE64]
+ICON_EOF
+          base64 -d /tmp/icon.b64 > assets/app_icon.png
+          test -s assets/app_icon.png
+      - name: Configure Android branding
+        script: |
+          set -e
+          mkdir -p android/app/src/main/res/drawable-nodpi android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/values-v31
+          cp assets/app_icon.png android/app/src/main/res/drawable-nodpi/ic_app_icon.png
+          cat > android/app/src/main/res/drawable/launch_background.xml <<'EOF'
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="@android:color/white" />
+              <item android:gravity="center" android:width="180dp" android:height="180dp">
+                  <bitmap android:src="@drawable/ic_app_icon" android:gravity="fill" />
+              </item>
+          </layer-list>
           EOF
-
-          cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-            <background android:drawable="@color/ic_launcher_background" />
-            <foreground android:drawable="@drawable/ic_launcher_foreground" />
-          </adaptive-icon>
-          EOF
-
-          cat > android/app/src/main/res/values/colors.xml <<'EOF'
-          <resources>
-            <color name="ic_launcher_background">#EAF5FF</color>
-          </resources>
-          EOF
-
           cat > android/app/src/main/res/values/styles.xml <<'EOF'
           <resources>
-            <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-              <item name="android:fontFamily">sans</item>
-              <item name="android:windowLightStatusBar">true</item>
-              <item name="android:statusBarColor">#F7FAFF</item>
-              <item name="android:navigationBarColor">#F7FAFF</item>
-              <item name="android:windowActionModeOverlay">true</item>
-            </style>
+              <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:statusBarColor">#FFFFFF</item>
+                  <item name="android:navigationBarColor">#FFFFFF</item>
+                  <item name="android:windowBackground">@drawable/launch_background</item>
+              </style>
+              <style name="NormalTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:statusBarColor">#F7FAFF</item>
+                  <item name="android:navigationBarColor">#F7FAFF</item>
+                  <item name="android:windowBackground">#F7FAFF</item>
+              </style>
           </resources>
           EOF
-
-          # Make the Android launcher use our custom adaptive icon.
-          sed -i 's#android:icon="@mipmap/ic_launcher"#android:icon="@mipmap/ic_launcher"#' android/app/src/main/AndroidManifest.xml
-
+          cat > android/app/src/main/res/values-v31/styles.xml <<'EOF'
+          <resources>
+              <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:windowSplashScreenBackground">#FFFFFF</item>
+                  <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_app_icon</item>
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:statusBarColor">#FFFFFF</item>
+                  <item name="android:navigationBarColor">#FFFFFF</item>
+              </style>
+              <style name="NormalTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:statusBarColor">#F7FAFF</item>
+                  <item name="android:navigationBarColor">#F7FAFF</item>
+                  <item name="android:windowBackground">#F7FAFF</item>
+              </style>
+          </resources>
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_app_icon"')
+          s = s.replace('android:label="my_id_portal_print"', 'android:label="My ID Portal Print"')
+          p.write_text(s)
+          PY
       - name: Get Flutter packages
         script: |
+          set -e
           flutter pub get
-
       - name: Configure Codemagic signing
         script: |
           set -e
+          test -n "$CM_KEYSTORE_PATH"
+          test -n "$CM_KEYSTORE_PASSWORD"
+          test -n "$CM_KEY_ALIAS"
+          test -n "$CM_KEY_PASSWORD"
           cat > android/key.properties <<EOF
           storePassword=$CM_KEYSTORE_PASSWORD
           keyPassword=$CM_KEY_PASSWORD
           keyAlias=$CM_KEY_ALIAS
           storeFile=$CM_KEYSTORE_PATH
           EOF
-
           python3 - <<'PY'
           from pathlib import Path
           p = Path('android/app/build.gradle.kts')
           s = p.read_text()
           header = '''import java.util.Properties
-import java.io.FileInputStream
+          import java.io.FileInputStream
 
-val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
-}
+          val keystoreProperties = Properties()
+          val keystorePropertiesFile = rootProject.file("key.properties")
+          if (keystorePropertiesFile.exists()) {
+              FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+          }
 
-'''
+          '''
           if 'val keystorePropertiesFile' not in s:
               s = header + s
-          if 'create("release")' not in s:
-              signing = '''signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
-        }
-    }
+          signing = '''    signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties["keyAlias"] as String
+                      keyPassword = keystoreProperties["keyPassword"] as String
+                      storeFile = file(keystoreProperties["storeFile"] as String)
+                      storePassword = keystoreProperties["storePassword"] as String
+                  }
+              }
 
-    '''
-              s = s.replace('    buildTypes {', '    ' + signing + 'buildTypes {', 1)
-          s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")')
+          '''
+          if 'create("release")' not in s:
+              marker = '    buildTypes {'
+              if marker not in s:
+                  raise SystemExit('Could not locate buildTypes in android/app/build.gradle.kts')
+              s = s.replace(marker, signing + marker, 1)
           if 'signingConfig = signingConfigs.getByName("release")' not in s:
-              s = s.replace('release {', 'release {\n            signingConfig = signingConfigs.getByName("release")', 1)
+              marker = '        getByName("release") {'
+              if marker not in s:
+                  raise SystemExit('Could not locate release build type in android/app/build.gradle.kts')
+              s = s.replace(marker, marker + '\n            signingConfig = signingConfigs.getByName("release")', 1)
           p.write_text(s)
           PY
-
       - name: Build signed release APK
         script: |
+          set -e
           flutter clean
           flutter pub get
-          flutter build apk --release
-
-      - name: Verify APK
+          flutter build apk --release --no-tree-shake-icons
+      - name: Verify signed APK
         script: |
-          test -f build/app/outputs/flutter-apk/app-release.apk
-          echo "Signed APK created successfully."
-
+          set -e
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          test -f "$APK"
+          ls -lh "$APK"
+          echo "My ID Portal Print signed APK created successfully."
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
-
     publishing:
       email:
         recipients:
