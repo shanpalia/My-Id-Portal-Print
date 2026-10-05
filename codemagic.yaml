@@ -20,11 +20,9 @@ workflows:
       - name: Prepare app icon asset
         script: |
           set -e
+          test -f assets/app_icon.svg
           mkdir -p assets
-          cat > /tmp/icon.b64 <<'ICON_EOF'
-[ICON_BASE64]
-ICON_EOF
-          base64 -d /tmp/icon.b64 > assets/app_icon.png
+          convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
           test -s assets/app_icon.png
       - name: Configure Android branding
         script: |
