@@ -19,13 +19,6 @@ workflows:
             flutter create --platforms=android --org com.shanpalia --project-name my_id_portal_print .
           fi
 
-      - name: Use compile-safe app source
-        script: |
-          set -e
-          cp lib/main_fixed.dart lib/main.dart
-          rm -f test/widget_test.dart
-          echo "Using compile-safe My ID Portal Print source."
-
       - name: Configure app icon and splash
         script: |
           set -e
@@ -64,6 +57,12 @@ workflows:
               <item name="android:windowLightStatusBar">true</item>
               <item name="android:statusBarColor">#FFFFFF</item>
               <item name="android:navigationBarColor">#FFFFFF</item>
+            </style>
+            <style name="NormalTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+              <item name="android:windowLightStatusBar">true</item>
+              <item name="android:statusBarColor">#F7FAFF</item>
+              <item name="android:navigationBarColor">#F7FAFF</item>
+              <item name="android:windowBackground">#F7FAFF</item>
             </style>
           </resources>
           EOF
@@ -128,10 +127,8 @@ workflows:
           if 'signingConfig = signingConfigs.getByName("release")' not in s:
               marker = '    buildTypes {'
               start = s.find(marker)
-              if start < 0:
-                  raise SystemExit('Could not locate buildTypes in android/app/build.gradle.kts')
               release_start = s.find('release {', start)
-              if release_start < 0:
+              if start < 0 or release_start < 0:
                   raise SystemExit('Could not locate release build type in android/app/build.gradle.kts')
               insert_at = release_start + len('release {')
               s = s[:insert_at] + '\n            signingConfig = signingConfigs.getByName("release")' + s[insert_at:]
@@ -141,6 +138,7 @@ workflows:
       - name: Analyze and build signed APK
         script: |
           set -e
+          rm -f test/widget_test.dart
           flutter clean
           flutter pub get
           flutter analyze --no-fatal-infos
