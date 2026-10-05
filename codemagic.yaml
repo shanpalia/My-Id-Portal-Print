@@ -19,19 +19,32 @@ workflows:
             flutter create --platforms=android --org com.shanpalia --project-name my_id_portal_print .
           fi
 
-      - name: Configure app icon and splash
+      - name: Configure Android SDK and branding
         script: |
           set -e
           test -f assets/app_icon.svg
           mkdir -p android/app/src/main/res/drawable-nodpi android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/values-v31
           convert -background none assets/app_icon.svg -resize 512x512 assets/app_icon.png
           cp assets/app_icon.png android/app/src/main/res/drawable-nodpi/ic_app_icon.png
+
+          # file_picker's Android lifecycle dependency requires compileSdk 36+.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle.kts')
+          if p.exists():
+              s = p.read_text()
+              s = s.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
+              s = s.replace('compileSdk = 34', 'compileSdk = 36')
+              p.write_text(s)
+          PY
+
           cat > android/app/src/main/res/drawable/launch_background.xml <<'EOF'
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
             <item android:drawable="@android:color/white" />
             <item android:gravity="center" android:width="180dp" android:height="180dp"><bitmap android:src="@drawable/ic_app_icon" android:gravity="fill" /></item>
           </layer-list>
           EOF
+
           cat > android/app/src/main/res/values/styles.xml <<'EOF'
           <resources>
             <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
@@ -49,6 +62,7 @@ workflows:
             </style>
           </resources>
           EOF
+
           cat > android/app/src/main/res/values-v31/styles.xml <<'EOF'
           <resources>
             <style name="LaunchTheme" parent="android:style/Theme.Material.Light.NoActionBar">
@@ -66,6 +80,7 @@ workflows:
             </style>
           </resources>
           EOF
+
           python3 - <<'PY'
           from pathlib import Path
           p = Path('android/app/src/main/AndroidManifest.xml')
@@ -138,7 +153,6 @@ workflows:
       - name: Analyze and build signed APK
         script: |
           set -e
-          # main_fixed.dart is an obsolete duplicate source and must not be analyzed.
           rm -f lib/main_fixed.dart
           rm -f test/widget_test.dart
           flutter clean
